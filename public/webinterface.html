@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Monitoring Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background: #000;
+            color: #33ff33; /* Green "hacker" text */
+        }
+        .title {
+            color: #33ff33;
+            font-size: 3rem;
+        }
+        .event-log, .file-change-log {
+            background: #111;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-y: auto;
+            height: 400px;
+        }
+        .event-log-item, .file-change-log-item {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: 6px;
+            border-left: 4px solid;
+        }
+        .event-type {
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        /* Activity color coding */
+        .event-FileModified {
+            background: rgba(79, 70, 229, 0.1);
+            border-left-color: #4F46E5;
+        }
+        .event-FileCreated {
+            background: rgba(16, 185, 129, 0.1);
+            border-left-color: #10B981;
+        }
+        .event-FileDeleted,
+        .event-FolderDeleted {
+            background: rgba(239, 68, 68, 0.1);
+            border-left-color: #EF4444;
+        }
+        .event-FolderCreated {
+            background: rgba(245, 158, 11, 0.1);
+            border-left-color: #F59E0B;
+        }
+        .event-SystemInitialized {
+            background: rgba(45, 212, 191, 0.1);
+            border-left-color: #2DD4BF;
+        }
+        .header, .section-title {
+            color: #ffcc00;
+        }
+        .timestamp {
+            color: #94a3b8;
+            font-size: 0.875rem;
+        }
+        .details {
+            margin-top: 0.5rem;
+            color: #d1d5db;
+        }
+
+        .content-changes {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+
+        .added-content {
+            color: #10B981;
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin: 2px 0;
+        }
+
+        .removed-content {
+            color: #EF4444;
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin: 2px 0;
+        }
+    </style>
+</head>
+<body>
+    <header class="bg-black p-4">
+        <div class="container mx-auto">
+            <h1 class="title" style="font-weight: 600;">Security Monitoring Hub v3.0</h1>
+            <p class="text-gray-400" style="font-weight: 600;">Real-time Security Event Monitoring</p>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4">
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="bg-gray-900 p-4 rounded-lg">
+                <h2 class="section-title text-xl mb-4">System Information</h2>
+                <div id="systemInfo" class="grid grid-cols-2 gap-2">
+                    <div>Computer Name:</div>
+                    <div id="computerName"></div>
+                    <div>Username:</div>
+                    <div id="username"></div>
+                    <div>Domain:</div>
+                    <div id="domain"></div>
+                    <div>IP Address:</div>
+                    <div id="ipAddress"></div>
+                    <div>OS Version:</div>
+                    <div id="osVersion"></div>
+                </div>
+            </div>
+
+            <div class="bg-gray-900 p-4 rounded-lg">
+                <h2 class="section-title text-xl mb-4">Monitoring Status</h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>Service Status:</div>
+                    <div id="serviceStatus" class="text-red-400">Inactive</div>
+                    <div>Monitoring Mode:</div>
+                    <div>Real-Time</div>
+                    <div>Log Location:</div>
+                    <div id="logLocation" class="text-white"></div>
+                    <div>Log Status:</div>
+                    <div id="logStatus" class="text-yellow-400">Not Created</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-gray-900 p-4 rounded-lg mb-6">
+            <h2 class="section-title text-xl mb-4">Control Panel</h2>
+            <div class="flex space-x-4 mb-4">
+                <input type="text" id="monitorPath" placeholder="Enter path to monitor" class="bg-black text-green-500 p-2 rounded flex-grow">
+                <input type="text" id="logFilePath" placeholder="Enter path for log file" class="bg-black text-green-500 p-2 rounded flex-grow">
+                <button onclick="initializeBaseline()" class="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded">Initialize Baseline</button>
+                <button onclick="toggleMonitoring()" id="monitoringButton" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded">Start Monitoring</button>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-gray-900 p-4 rounded-lg col-span-2">
+                <h2 class="section-title text-xl mb-4">File System Changes</h2>
+                <div id="fileSystemChanges" class="file-change-log"></div>
+            </div>
+
+            <div class="bg-gray-900 p-4 rounded-lg">
+                <h2 class="section-title text-xl mb-4">Event Statistics</h2>
+                <canvas id="eventChart" class="w-full"></canvas>
+            </div>
+        </section>
+
+        <section class="bg-gray-900 p-4 rounded-lg">
+            <h2 class="section-title text-xl mb-4">Security Events</h2>
+            <div id="securityEvents" class="event-log"></div>
+        </section>
+    </main>
+
+    <script>
+        let monitoring = false;
+        let eventChart;
+        let eventStats = {
+            FileModified: 0,
+            FileCreated: 0,
+            FileDeleted: 0,
+            FolderCreated: 0,
+            FolderDeleted: 0,
+            SuspiciousActivity: 0
+        };
+
+        function initializeChart() {
+            const ctx = document.getElementById('eventChart').getContext('2d');
+            eventChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(eventStats),
+                    datasets: [{
+                        data: Object.values(eventStats),
+                        backgroundColor: [
+                            '#4F46E5',
+                            '#10B981',
+                            '#EF4444',
+                            '#F59E0B',
+                            '#940404',
+                            '#EC4899'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#33ff33'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function initializeSystemInfo() {
+            try {
+                const response = await fetch('/api/system-info');
+                const data = await response.json();
+
+                document.getElementById('computerName').textContent = data.ComputerName;
+                document.getElementById('username').textContent = data.Username;
+                document.getElementById('domain').textContent = data.Domain;
+                document.getElementById('ipAddress').textContent = data.IP;
+                document.getElementById('osVersion').textContent = data.OSVersion;
+            } catch (error) {
+                console.error('Failed to fetch system information:', error);
+            }
+        }
+
+        async function initializeBaseline() {
+            const path = document.getElementById('monitorPath').value;
+            const logFilePath = document.getElementById('logFilePath').value;
+            if (!path || !logFilePath) {
+                alert('Please enter both the path to monitor and the log file path');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/initialize-baseline', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path, logFilePath })
+                });
+
+                if (response.ok) {
+                    document.getElementById('logLocation').textContent = logFilePath;
+                    document.getElementById('logStatus').textContent = 'Initialized';
+                    document.getElementById('logStatus').className = 'text-green-400';
+                    addFileChange('SystemInitialized', 'Security baseline initialized successfully');
+                } else {
+                    throw new Error('Failed to initialize baseline');
+                }
+            } catch (error) {
+                console.error('Error initializing baseline:', error);
+                alert('Failed to initialize baseline');
+            }
+        }
+
+        async function toggleMonitoring() {
+            const path = document.getElementById('monitorPath').value;
+            if (!path) {
+                alert('Please enter a path to monitor');
+                return;
+            }
+
+            monitoring = !monitoring;
+            const button = document.getElementById('monitoringButton');
+            const statusElement = document.getElementById('serviceStatus');
+
+            if (monitoring) {
+                try {
+                    const response = await fetch('/api/start-monitoring', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            path,
+                            logFilePath: document.getElementById('logFilePath').value
+                        })
+                    });
+
+                    if (response.ok) {
+                        button.textContent = 'Stop Monitoring';
+                        button.classList.replace('bg-green-600', 'bg-red-600');
+                        button.classList.replace('hover:bg-green-700', 'hover:bg-red-700');
+                        button.style.color = '#ffffff'; // Set font color to white
+                        statusElement.textContent = 'Active';
+                        statusElement.classList.replace('text-red-400', 'text-green-400');
+                        document.getElementById('logStatus').textContent = 'Active';
+                        document.getElementById('logStatus').className = 'text-green-400';
+                        addFileChange('SystemInitialized', 'Monitoring started - Log file created and active');
+                    } else {
+                        throw new Error('Failed to start monitoring');
+                    }
+                } catch (error) {
+                    console.error('Error starting monitoring:', error);
+                    alert('Failed to start monitoring');
+                    monitoring = false;
+                    return;
+                }
+            } else {
+                button.textContent = 'Start Monitoring';
+                button.classList.replace('bg-red-600', 'bg-green-600');
+                button.classList.replace('hover:bg-red-700', 'hover:bg-green-700');
+                statusElement.textContent = 'Inactive';
+                statusElement.classList.replace('text-green-400', 'text-red-400');
+                document.getElementById('logStatus').textContent = 'Paused';
+                document.getElementById('logStatus').className = 'text-yellow-400';
+                stopMonitoring();
+            }
+        }
+
+        function addFileChange(type, message, changes = '') {
+            const changesContainer = document.getElementById('fileSystemChanges');
+            const changeElement = document.createElement('div');
+            changeElement.className = `file-change-log-item event-${type}`;
+
+            const timestamp = new Date().toLocaleTimeString();
+            changeElement.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span class="event-type">${type}</span>
+                    <span class="timestamp">${timestamp}</span>
+                </div>
+                <div class="details">${message}</div>
+                ${formatContentChanges(changes)}
+            `;
+
+            changesContainer.insertBefore(changeElement, changesContainer.firstChild);
+        }
+
+        function formatContentChanges(changes) {
+            if (!changes) return '';
+
+            const lines = changes.split('\n');
+            let formattedHTML = '<div class="content-changes">';
+
+            lines.forEach(line => {
+                if (line.startsWith('+')) {
+                    formattedHTML += `<div class="added-content">+ ${line.substring(1)}</div>`;
+                } else if (line.startsWith('-')) {
+                    formattedHTML += `<div class="removed-content">- ${line.substring(1)}</div>`;
+                }
+            });
+
+            return formattedHTML + '</div>';
+        }
+
+        async function stopMonitoring() {
+            try {
+                await fetch('/api/stop-monitoring', {
+                    method: 'POST'
+                });
+                addFileChange('SystemInitialized', 'Monitoring stopped');
+            } catch (error) {
+                console.error('Error stopping monitoring:', error);
+            }
+        }
+
+        const socket = io();
+        socket.on('file-event', (data) => {
+            const details = formatEventDetails(data);
+            addFileChange(data.type, details, data.changes);
+            updateEventStats(data.type);
+            updateChart();
+        });
+
+        function formatEventDetails(data) {
+            let details = `Path: ${data.path}`;
+            if (data.type === 'FileModified') {
+                details += `<br>Changes: ${data.details}`;
+                if (data.content) {
+                    details += `<br>Modified Content: ${data.content}`;
+                }
+            }
+            if (data.timestamp) {
+                details += `<br>Timestamp: ${new Date(data.timestamp).toLocaleString()}`;
+            }
+            return details;
+        }
+
+        function updateEventStats(type) {
+            if (type in eventStats) {
+                eventStats[type]++;
+            }
+        }
+
+        function updateChart() {
+            eventChart.data.datasets[0].data = Object.values(eventStats);
+            eventChart.update();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeChart();
+            initializeSystemInfo();
+        });
+    </script>
+</body>
+</html>
