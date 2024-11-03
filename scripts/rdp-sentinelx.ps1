@@ -1,10 +1,10 @@
-
 # Get API key from here: https://ip-api.com/ (Note: No API key is needed for the free plan)
 $LOGFILE_NAME = "failed_rdp.log"
 $LOG_DIRECTORY = "C:\ProgramData\RDPLogs"
 $BLOCKED_IP_DIRECTORY = "C:\ProgramData\RDPLogs"
 $LOGFILE_PATH = "$LOG_DIRECTORY\$($LOGFILE_NAME)"
 $BLOCKED_IPS_FILE = "C:\ProgramData\BlockedIPs\blocked_ips.txt"
+$WHITELIST_IP_FILE = "C:\ProgramData\RDPLogs\whitelisted_ips.txt"
 
 $SystemInfo = @{
     ComputerName = $env:COMPUTERNAME
@@ -26,6 +26,20 @@ $XMLFilter = @'
     </Query>
 </QueryList> 
 '@
+
+# Load whitelisted IPs from file
+$whitelistedIPs = @{}
+if (-not (Test-Path $WHITELIST_IP_FILE)) {
+    # Create the whitelisted IP file if it doesn't exist
+    New-Item -ItemType File -Path $WHITELIST_IP_FILE -Force | Out-Null
+    Write-Host "Whitelisted IPs file created at $WHITELIST_IP_FILE" -ForegroundColor Green
+}
+
+# Load IPs from the whitelisted file if it exists
+$whitelistedIPsArray = Get-Content -Path $WHITELIST_IP_FILE
+foreach ($ip in $whitelistedIPsArray) {
+    $whitelistedIPs[$ip.Trim()] = $true
+}
 
 # Function to write sample log files to train the Log Analytics workspace
 Function write-Sample-Log() {
@@ -67,13 +81,35 @@ $failedAttempts = @{}
 $userAttempts = @{}
 $blockedIPs = @{}
 
+# Load blocked IPs from file
+if (Test-Path $BLOCKED_IPS_FILE) {
+    $blockedIPsArray = Get-Content -Path $BLOCKED_IPS_FILE
+    foreach ($ip in $blockedIPsArray) {
+        $blockedIPs[$ip.Trim()] = $true
+    }
+}
+
 # Function to block an IP address
 Function Block-IP($ip) {
-    if (-not $blockedIPs.ContainsKey($ip)) {
+    if ($whitelistedIPs.ContainsKey($ip)) {
+        Write-Host "IP $ip is whitelisted, skipping block." -ForegroundColor Yellow
+    }
+    elseif (-not $blockedIPs.ContainsKey($ip)) {
         # Example command to block IP (replace with actual firewall rule command)
         Write-Host "Blocking IP: $ip" -ForegroundColor Red
         "Blocked IP: $ip" | Out-File -FilePath $BLOCKED_IPS_FILE -Append -Encoding utf8
         $blockedIPs[$ip] = $true
+    }
+}
+
+# Function to unblock an IP address
+Function Unblock-IP($ip) {
+    if ($blockedIPs.ContainsKey($ip)) {
+        Write-Host "Unblocking IP: $ip" -ForegroundColor Green
+        $blockedIPs.Remove($ip)
+        # Remove IP from blocked IPs file
+        $blockedIPsArray = Get-Content -Path $BLOCKED_IPS_FILE | Where-Object { $_ -ne "Blocked IP: $ip" }
+        $blockedIPsArray | Out-File -FilePath $BLOCKED_IPS_FILE -Force -Encoding utf8
     }
 }
 
@@ -82,7 +118,6 @@ Function Is-OutsideNormalHours($timestamp) {
     $hour = [int]$timestamp.Split(' ')[1].Split(':')[0]
     return ($hour -lt 8 -or $hour -gt 18) # Outside of 8 AM to 6 PM
 }
-
 
 # Infinite Loop that keeps checking the Event Viewer logs.
 $summaryInterval = 10 # Interval for event summary output
@@ -100,6 +135,13 @@ while ($true)
             $username = $event.properties[5].Value
             $sourceHost = $event.properties[11].Value
             $sourceIp = $event.properties[19].Value
+            
+            # Skip processing if the IP is in the whitelist
+            if ($whitelistedIPs.ContainsKey($sourceIp)) {
+                Write-Host "Skipping whitelisted IP: $sourceIp" -ForegroundColor Yellow
+                continue
+            }
+            
             $eventId = $event.Id
             $rawLogonType = $event.properties[8].Value
             $logonType = switch ($rawLogonType) {
@@ -126,7 +168,7 @@ while ($true)
                 Start-Sleep -Seconds 1
 
                 # Check if the IP address is private
-                if (Is-PrivateIP $sourceIp) {
+                if (Is-PrivateIP($sourceIp)) {
                     # Set values for private IP addresses
                     $latitude = "N/A"
                     $longitude = "N/A"
@@ -254,8 +296,17 @@ while ($true)
                 Write-Host "  Logon Type      : $logonType" -ForegroundColor Cyan
                 Write-Host "  Failure Reason  : $failureReason" -ForegroundColor Cyan
                 Write-Host "  Attack Type     : $attackType" -ForegroundColor Green
-                Write-Host "  MITRE Technique : $mitreAttackTechnique`n" -ForegroundColor Green
+                Write-Host "  MITRE Technique : $mitreAttacktechnique`n" -ForegroundColor Green
             }
+        }
+    }
+
+    # Check for successful logins and unblock IPs if necessary
+    $successfulEvents = Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4624} -ErrorAction SilentlyContinue
+    foreach ($event in $successfulEvents) {
+        $sourceIp = $event.properties[18].Value
+        if ($blockedIPs.ContainsKey($sourceIp)) {
+            Unblock-IP $sourceIp
         }
     }
 
@@ -265,5 +316,3 @@ while ($true)
         $processedEvents.Clear()
     }
 }
- 
- 
