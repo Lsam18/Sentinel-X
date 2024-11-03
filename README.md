@@ -1,4 +1,4 @@
-# RDP Monitoring Tool - README
+# RDP Monitoring Tool - GUIDE
 
 ## Part 1: Pre-requisites Installation Script
 This script installs all pre-requisites necessary to run the RDP monitoring tool. Save this script as `install-prerequisites.ps1`.
