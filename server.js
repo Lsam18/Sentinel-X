@@ -55,7 +55,7 @@ function getFileDiff(filePath) {
         } else {
             // First time seeing this file
             fileContents.set(filePath, currentContent);
-            return `Initial content: "${currentContent.trim()}"`;
+            return `Modified content Detected: "${currentContent.trim()}"`;
         }
     } catch (err) {
         console.error(`Error getting file diff: ${err.message}`);
