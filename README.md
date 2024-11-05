@@ -150,7 +150,7 @@ This script installs all pre-requisites necessary to run the RDP monitoring tool
 #### Example Usage
 Run the script with administrative privileges:
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File "install-prerequisites.ps1"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass"
 ```
 
 ### Script Code
@@ -189,7 +189,7 @@ Save this script as `configure-rdp-monitor.ps1`.
 #### Example Usage
 Run the script with administrative privileges:
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File "configure-rdp-monitor.ps1"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass"
 ```
 
 ### Script Code
@@ -226,7 +226,7 @@ Save this script as `start-rdp-monitor.ps1`.
 #### Example Usage
 Run the script with administrative privileges:
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File "start-rdp-monitor.ps1"
+./rdp-sentinelx.ps1"
 ```
 
 ### Script Code
@@ -261,19 +261,14 @@ Write-Host "[RDP MONITOR TOOL] Monitoring started successfully." -ForegroundColo
 
 ### Steps to Run the RDP Monitoring Tool
 
-1. **Install Pre-requisites**: Run the pre-requisites script with administrator privileges.
+1. **Set Admin Priveliges**: Run the pre-requisites script with administrator privileges.
    ```
-   powershell.exe -ExecutionPolicy Bypass -File "install-prerequisites.ps1"
-   ```
-
-2. **Configuration**: Set up all required configurations by running the configuration script.
-   ```
-   powershell.exe -ExecutionPolicy Bypass -File "configure-rdp-monitor.ps1"
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass"
    ```
 
-3. **Start the Monitoring Tool**: Start the monitoring by running the main execution script.
+2. **Start the Monitoring Tool**: Start the monitoring by running the main execution script.
    ```
-   powershell.exe -ExecutionPolicy Bypass -File "start-rdp-monitor.ps1"
+   ./rdp-sentinelx.ps1"
    ```
 
 ### Important Notes
