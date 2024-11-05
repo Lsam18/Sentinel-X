@@ -217,7 +217,7 @@ Write-Host "[CONFIGURATION COMPLETE] Configuration completed successfully." -For
 ---
 
 ## Part 3: Main Execution Script
-Save this script as `start-rdp-monitor.ps1`.
+Save this script as `rdp-sentinelx.ps1`.
 
 ### Script Details
 - **Ensure Administrative Privileges**: This script also checks if it is being run with administrative privileges.
@@ -226,7 +226,7 @@ Save this script as `start-rdp-monitor.ps1`.
 #### Example Usage
 Run the script with administrative privileges:
 ```powershell
-./rdp-sentinelx.ps1"
+./rdp-sentinelx.ps1
 ```
 
 ### Script Code
@@ -263,12 +263,12 @@ Write-Host "[RDP MONITOR TOOL] Monitoring started successfully." -ForegroundColo
 
 1. **Set Admin Priveliges**: Run the pre-requisites script with administrator privileges.
    ```
-    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass"
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
    ```
 
 2. **Start the Monitoring Tool**: Start the monitoring by running the main execution script.
    ```
-   ./rdp-sentinelx.ps1"
+   ./rdp-sentinelx.ps1
    ```
 
 ### Important Notes
