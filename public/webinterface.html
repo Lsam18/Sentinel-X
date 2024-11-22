@@ -135,10 +135,10 @@
         <section class="bg-gray-900 p-4 rounded-lg mb-6">
             <h2 class="section-title text-xl mb-4">Control Panel</h2>
             <div class="flex space-x-4 mb-4">
-                <input type="text" id="monitorPath" placeholder="Enter path to monitor" class="bg-black text-green-500 p-2 rounded flex-grow">
-                <input type="text" id="logFilePath" placeholder="Enter path for log file" class="bg-black text-green-500 p-2 rounded flex-grow">
-                <button onclick="initializeBaseline()" class="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded">Initialize Baseline</button>
-                <button onclick="toggleMonitoring()" id="monitoringButton" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded">Start Monitoring</button>
+                <input type="text" id="monitorPath" placeholder="Enter path to monitor" class="bg-black text-green-500 p-2 rounded flex-grow" title="Enter the directory path you want to monitor">
+                <input type="text" id="logFilePath" placeholder="Enter path for log file" class="bg-black text-green-500 p-2 rounded flex-grow" title="Enter the location where the log file should be stored">
+                <button onclick="initializeBaseline()" class="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded" title="Create a new monitoring session and start monitoring afresh">Initialize Baseline</button>
+                <button onclick="toggleMonitoring()" id="monitoringButton" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded" title="Start or stop the monitoring service">Start Monitoring</button>
             </div>
         </section>
 
@@ -159,6 +159,7 @@
 
     <script>
         let monitoring = false;
+        let resumedMonitoring = false;
         let eventChart;
         let eventStats = {
             FileModified: 0,
@@ -236,6 +237,7 @@
                     document.getElementById('logStatus').textContent = 'Initialized';
                     document.getElementById('logStatus').className = 'text-green-400';
                     addFileChange('SystemInitialized', 'Security baseline initialized successfully');
+                    resumedMonitoring = false; // Set resumedMonitoring to false since it's a fresh start
                 } else {
                     throw new Error('Failed to initialize baseline');
                 }
@@ -276,7 +278,12 @@
                         statusElement.classList.replace('text-red-400', 'text-green-400');
                         document.getElementById('logStatus').textContent = 'Active';
                         document.getElementById('logStatus').className = 'text-green-400';
-                        addFileChange('SystemInitialized', 'Monitoring started - Log file created and active');
+                        if (resumedMonitoring) {
+                            addFileChange('MonitoringResumed', 'Monitoring resumed - Logging any changes that occurred while paused');
+                        } else {
+                            addFileChange('MonitoringStarted', 'Monitoring started - Log file created and active');
+                        }
+                        resumedMonitoring = true; // Mark monitoring as resumed if stopped before
                     } else {
                         throw new Error('Failed to start monitoring');
                     }
@@ -338,7 +345,7 @@
                 await fetch('/api/stop-monitoring', {
                     method: 'POST'
                 });
-                addFileChange('SystemInitialized', 'Monitoring stopped');
+                addFileChange('MonitoringPaused', 'Monitoring stopped and paused');
             } catch (error) {
                 console.error('Error stopping monitoring:', error);
             }
