@@ -7,9 +7,32 @@ const { Server } = require('socket.io');
 const http = require('http');
 const fs = require('fs');
 const diff = require('diff');
+const bcrypt = require('bcrypt'); 
+const session = require('express-session');
 
 const app = express();
 const PORT = 3000;
+
+// In-memory user store (In production, use a proper database)
+const users = [];
+
+// Register Route
+app.post('/register', async (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).send('Username and password are required');
+    }
+
+    // Hash the password before storing it
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Store the new user
+    users.push({ username, password: hashedPassword });
+
+    res.status(201).send('User registered successfully');
+});
+
 
 // Keep track of the log file path to ignore it in the watcher
 let currentLogPath = null;
