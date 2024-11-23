@@ -3,159 +3,240 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Security Monitoring Dashboard</title>
+    <title>Enterprise SOC Dashboard</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
         body {
-            font-family: 'Courier New', Courier, monospace;
-            background: #000;
-            color: #33ff33; /* Green "hacker" text */
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(to bottom, #0a1120, #16243a,#0a1120);
+            
+            color: #ffb702;
         }
-        .title {
-            color: #33ff33;
-            font-size: 3rem;
+
+        .dashboard-card {
+            background: rgba(20, 29, 47, 0.85);
+            border-radius: 16px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.9);
+            transition: all 0.3s ease;
         }
+
+        .dashboard-card:hover {
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 1);
+        }
+
         .event-log, .file-change-log {
-            background: #111;
-            padding: 1rem;
-            border-radius: 8px;
-            overflow-y: auto;
             height: 400px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #6366f1 #0a1120;
         }
-        .event-log-item, .file-change-log-item {
-            margin-bottom: 1rem;
-            padding: 0.75rem;
-            border-radius: 6px;
-            border-left: 4px solid;
+
+        .event-log::-webkit-scrollbar, .file-change-log::-webkit-scrollbar {
+            width: 8px;
         }
-        .event-type {
-            font-weight: bold;
-            padding: 2px 8px;
+
+        .event-log::-webkit-scrollbar-track, .file-change-log::-webkit-scrollbar-track {
+            background: #0a1120;
+        }
+
+        .event-log::-webkit-scrollbar-thumb, .file-change-log::-webkit-scrollbar-thumb {
+            background-color: #6366f1;
             border-radius: 4px;
         }
-        /* Activity color coding */
+
+        .event-log-item, .file-change-log-item {
+            border-left: 4px solid;
+            margin-bottom: 0.75rem;
+            padding: 0.75rem;
+            background: rgba(24, 34, 51, 0.85);
+            border-radius: 8px;
+            transition: transform 0.2s ease, background 0.3s ease;
+        }
+
+        .event-log-item:hover, .file-change-log-item:hover {
+            transform: translateX(6px);
+            background: rgba(38, 50, 70, 0.85);
+        }
+
         .event-FileModified {
-            background: rgba(79, 70, 229, 0.1);
-            border-left-color: #4F46E5;
+            border-left-color: #3b82f6;
         }
+
         .event-FileCreated {
-            background: rgba(16, 185, 129, 0.1);
-            border-left-color: #10B981;
+            border-left-color: #10b981;
         }
+
         .event-FileDeleted,
         .event-FolderDeleted {
-            background: rgba(239, 68, 68, 0.1);
-            border-left-color: #EF4444;
+            border-left-color: #ef4444;
         }
+
         .event-FolderCreated {
-            background: rgba(245, 158, 11, 0.1);
-            border-left-color: #F59E0B;
+            border-left-color: #f59e0b;
         }
+
         .event-SystemInitialized {
-            background: rgba(45, 212, 191, 0.1);
-            border-left-color: #2DD4BF;
+            border-left-color: #0ea5e9;
         }
-        .header, .section-title {
-            color: #ffcc00;
-        }
-        .timestamp {
-            color: #94a3b8;
+
+        .status-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
             font-size: 0.875rem;
+            font-weight: 600;
         }
-        .details {
-            margin-top: 0.5rem;
-            color: #d1d5db;
+
+        .status-active {
+            background-color: #166534;
+            color: #bbf7d0;
+        }
+
+        .status-inactive {
+            background-color: #7f1d1d;
+            color: #fecaca;
         }
 
         .content-changes {
+            background: rgba(24, 34, 51, 0.85);
+            border-radius: 8px;
+            padding: 1rem;
             margin-top: 0.5rem;
-            padding: 0.5rem;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 4px;
+            font-family: 'Monaco', 'Consolas', monospace;
         }
 
         .added-content {
-            color: #10B981;
-            font-family: monospace;
-            white-space: pre-wrap;
-            margin: 2px 0;
+            color: #10b981;
+            font-weight: bold;
         }
 
         .removed-content {
-            color: #EF4444;
-            font-family: monospace;
-            white-space: pre-wrap;
-            margin: 2px 0;
+            color: #ef4444;
+            font-weight: bold;
+        }
+
+        .button-primary {
+            background: linear-gradient(145deg, #000000, #818cf8);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.7);
+            transition: all 0.3s ease;
+        }
+
+        .button-primary:hover {
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.9);
+        }
+
+        .button-secondary {
+            background: linear-gradient(145deg, #000000, #02ff0a);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.7);
+            transition: all 0.3s ease;
+        }
+
+        .button-secondary:hover {
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.9);
         }
     </style>
 </head>
-<body>
-    <header class="bg-black p-4">
-        <div class="container mx-auto">
-            <h1 class="title" style="font-weight: 600;">Security File Integrity Monitoring Hub - SentinelX</h1>
-            <p class="text-gray-400" style="font-weight: 600;">Real-time File Integrity Monitoring</p>
+<body class="min-h-screen">
+    <nav class="bg-gradient-to-r from-gray-900 to-gray-800 shadow-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <svg class="h-8 w-8 text-blue-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                    <div class="ml-4">
+                        <h1 class="text-2xl font-bold text-blue-200">Enterprise Sentinel X - Security Operations Tool</h1>
+                        <p class="text-sm text-orange-400">Real-time Security Monitoring - File Integrity Monitor</p>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <span class="status-badge bg-green-700 text-green-100">SIEM-FIM Connected</span>
+                </div>
+            </div>
         </div>
-    </header>
+    </nav>
 
-    <main class="container mx-auto p-4">
-        <section class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div class="bg-gray-900 p-4 rounded-lg">
-                <h2 class="section-title text-xl mb-4">System Information</h2>
-                <div id="systemInfo" class="grid grid-cols-2 gap-2">
-                    <div>Computer Name:</div>
-                    <div id="computerName"></div>
-                    <div>Username:</div>
-                    <div id="username"></div>
-                    <div>Domain:</div>
-                    <div id="domain"></div>
-                    <div>IP Address:</div>
-                    <div id="ipAddress"></div>
-                    <div>OS Version:</div>
-                    <div id="osVersion"></div>
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div class="dashboard-card p-8">
+                <h2 class="text-xl font-bold text-gray-100 mb-6">System Information</h2>
+                <div class="grid grid-cols-2 gap-6 text-sm">
+                    <div class="text-gray-400">Computer Name</div>
+                    <div id="computerName" class="font-medium text-gray-200"></div>
+                    <div class="text-gray-400">Username</div>
+                    <div id="username" class="font-medium text-gray-200"></div>
+                    <div class="text-gray-400">Domain</div>
+                    <div id="domain" class="font-medium text-gray-200"></div>
+                    <div class="text-gray-400">IP Address</div>
+                    <div id="ipAddress" class="font-medium text-gray-200"></div>
+                    <div class="text-gray-400">OS Version</div>
+                    <div id="osVersion" class="font-medium text-gray-200"></div>
                 </div>
             </div>
 
-            <div class="bg-gray-900 p-4 rounded-lg">
-                <h2 class="section-title text-xl mb-4">Monitoring Status</h2>
-                <div class="grid grid-cols-2 gap-2">
-                    <div>Service Status:</div>
-                    <div id="serviceStatus" class="text-red-400">Inactive</div>
-                    <div>Monitoring Mode:</div>
-                    <div>Real-Time</div>
-                    <div>Log Location:</div>
-                    <div id="logLocation" class="text-white"></div>
-                    <div>Log Status:</div>
-                    <div id="logStatus" class="text-yellow-400">Not Created</div>
+            <div class="dashboard-card p-8">
+                <h2 class="text-xl font-bold text-gray-100 mb-6">Monitoring Status</h2>
+                <div class="grid grid-cols-2 gap-6 text-sm">
+                    <div class="text-gray-400">Service Status</div>
+                    <div id="serviceStatus" class="status-badge status-active">Active</div>
+                    <div class="text-gray-400">Monitoring Mode</div>
+                    <div class="font-medium text-gray-200">Real-Time</div>
+                    <div class="text-gray-400">Log Location</div>
+                    <div id="logLocation" class="font-medium text-gray-200 truncate"></div>
+                    <div class="text-gray-400">Log Status</div>
+                    <div id="logStatus" class="status-badge status-active">Active</div>
                 </div>
             </div>
-        </section>
+        </div>
 
-        <section class="bg-gray-900 p-4 rounded-lg mb-6">
-            <h2 class="section-title text-xl mb-4">Control Panel</h2>
-            <div class="flex space-x-4 mb-4">
-                <input type="text" id="monitorPath" placeholder="Enter path to monitor" class="bg-black text-green-500 p-2 rounded flex-grow" title="Enter the directory path you want to monitor">
-                <input type="text" id="logFilePath" placeholder="Enter path for log file" class="bg-black text-green-500 p-2 rounded flex-grow" title="Enter the location where the log file should be stored">
-                <button onclick="initializeBaseline()" class="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded" title="Create a new monitoring session and start monitoring afresh">Initialize Baseline</button>
-                <button onclick="toggleMonitoring()" id="monitoringButton" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded" title="Start or stop the monitoring service">Start Monitoring</button>
+        <div class="dashboard-card p-8 mb-8">
+            <h2 class="text-xl font-bold text-gray-100 mb-6">Control Panel</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <input type="text" id="monitorPath" placeholder="Enter path to monitor" 
+                    class="w-full px-4 py-3 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-800 text-gray-300">
+                <input type="text" id="logFilePath" placeholder="Enter path for log file" 
+                    class="w-full px-4 py-3 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-800 text-gray-300">
             </div>
-        </section>
+            <div class="flex space-x-6">
+                <button onclick="initializeBaseline()" 
+                    class="button-primary px-6 py-3 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    Initialize Baseline
+                </button>
+                <button onclick="toggleMonitoring()" id="monitoringButton"
+                    class="button-secondary px-6 py-3 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                    Start Monitoring
+                </button>
+            </div>
+        </div>
 
-        <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div class="bg-gray-900 p-4 rounded-lg col-span-2">
-                <h2 class="section-title text-xl mb-4">File System Changes</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+            <div class="dashboard-card p-8 md:col-span-2">
+                <h2 class="text-xl font-bold text-gray-100 mb-6">File System Changes</h2>
                 <div id="fileSystemChanges" class="file-change-log"></div>
             </div>
 
-            <div class="bg-gray-900 p-4 rounded-lg">
-                <h2 class="section-title text-xl mb-4">Event Statistics</h2>
-                <canvas id="eventChart" class="w-full"></canvas>
+            <div class="dashboard-card p-8">
+                <h2 class="text-xl font-bold text-gray-100 mb-6">Event Statistics</h2>
+                <canvas id="eventChart"></canvas>
             </div>
-        </section>
+        </div>
 
-        
+        <div class="dashboard-card p-8">
+            <h2 class="text-xl font-bold text-gray-100 mb-6">Monitoring History</h2>
+            <div id="monitoringHistory" class="text-sm text-gray-400">
+                <p>No previous monitoring history available.</p>
+            </div>
+        </div>
     </main>
+
+    <footer class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-center text-gray-400">
+        Made with <span class="text-red-500">&#10084;</span> by LSAM
+    </footer>
 
     <script>
         let monitoring = false;
@@ -235,9 +316,12 @@
                 if (response.ok) {
                     document.getElementById('logLocation').textContent = logFilePath;
                     document.getElementById('logStatus').textContent = 'Initialized';
-                    document.getElementById('logStatus').className = 'text-green-400';
+                    document.getElementById('logStatus').className = 'status-badge status-active';
+                    document.getElementById('fileSystemChanges').innerHTML = ''; // Clear previous file changes
                     addFileChange('SystemInitialized', 'Security baseline initialized successfully');
                     resumedMonitoring = false; // Set resumedMonitoring to false since it's a fresh start
+                    addMonitoringHistory('Baseline initialized for path: ' + path);
+                    monitoring = false; // Reset monitoring flag for new session
                 } else {
                     throw new Error('Failed to initialize baseline');
                 }
@@ -249,6 +333,7 @@
 
         async function toggleMonitoring() {
             const path = document.getElementById('monitorPath').value;
+            const logFilePath = document.getElementById('logFilePath').value;
             if (!path) {
                 alert('Please enter a path to monitor');
                 return;
@@ -263,10 +348,7 @@
                     const response = await fetch('/api/start-monitoring', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            path,
-                            logFilePath: document.getElementById('logFilePath').value
-                        })
+                        body: JSON.stringify({ path, logFilePath })
                     });
 
                     if (response.ok) {
@@ -275,15 +357,19 @@
                         button.classList.replace('hover:bg-green-700', 'hover:bg-red-700');
                         button.style.color = '#ffffff'; // Set font color to white
                         statusElement.textContent = 'Active';
-                        statusElement.classList.replace('text-red-400', 'text-green-400');
+                        statusElement.classList.replace('status-inactive', 'status-active');
                         document.getElementById('logStatus').textContent = 'Active';
-                        document.getElementById('logStatus').className = 'text-green-400';
+                        document.getElementById('logStatus').className = 'status-badge status-active';
+
                         if (resumedMonitoring) {
+                            // Load previous logs if resuming
+                            loadPreviousLogs(logFilePath);
                             addFileChange('MonitoringResumed', 'Monitoring resumed - Logging any changes that occurred while paused');
                         } else {
                             addFileChange('MonitoringStarted', 'Monitoring started - Log file created and active');
                         }
                         resumedMonitoring = true; // Mark monitoring as resumed if stopped before
+                        addMonitoringHistory('Monitoring started for path: ' + path);
                     } else {
                         throw new Error('Failed to start monitoring');
                     }
@@ -298,10 +384,12 @@
                 button.classList.replace('bg-red-600', 'bg-green-600');
                 button.classList.replace('hover:bg-red-700', 'hover:bg-green-700');
                 statusElement.textContent = 'Inactive';
-                statusElement.classList.replace('text-green-400', 'text-red-400');
+                statusElement.classList.replace('status-active', 'status-inactive');
                 document.getElementById('logStatus').textContent = 'Paused';
-                document.getElementById('logStatus').className = 'text-yellow-400';
-                stopMonitoring();
+                document.getElementById('logStatus').className = 'status-badge status-inactive';
+                await stopMonitoring();
+                addMonitoringHistory('Monitoring stopped for path: ' + path);
+                resumedMonitoring = true; // Mark as paused to allow resuming later
             }
         }
 
@@ -323,6 +411,14 @@
             changesContainer.insertBefore(changeElement, changesContainer.firstChild);
         }
 
+        function addMonitoringHistory(message) {
+            const historyContainer = document.getElementById('monitoringHistory');
+            const historyElement = document.createElement('div');
+            historyElement.className = 'mb-2';
+            historyElement.textContent = `${new Date().toLocaleString()}: ${message}`;
+            historyContainer.appendChild(historyElement);
+        }
+
         function formatContentChanges(changes) {
             if (!changes) return '';
 
@@ -342,21 +438,47 @@
 
         async function stopMonitoring() {
             try {
-                await fetch('/api/stop-monitoring', {
+                const response = await fetch('/api/stop-monitoring', {
                     method: 'POST'
                 });
-                addFileChange('MonitoringPaused', 'Monitoring stopped and paused');
+                if (response.ok) {
+                    addFileChange('MonitoringPaused', 'Monitoring stopped and paused');
+                    if (watcher) {
+                        watcher.close();
+                        watcher = null;
+                    }
+                } else {
+                    throw new Error('Failed to stop monitoring');
+                }
             } catch (error) {
                 console.error('Error stopping monitoring:', error);
+            }
+        }
+
+        async function loadPreviousLogs(logFilePath) {
+            try {
+                const response = await fetch(`/api/load-logs?logFilePath=${encodeURIComponent(logFilePath)}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    data.logs.forEach(log => {
+                        addFileChange(log.type, log.message, log.changes);
+                    });
+                } else {
+                    console.warn('No previous logs found for this log file path.');
+                }
+            } catch (error) {
+                console.error('Failed to load previous logs:', error);
             }
         }
 
         const socket = io();
         socket.on('file-event', (data) => {
             const details = formatEventDetails(data);
-            addFileChange(data.type, details, data.changes);
-            updateEventStats(data.type);
-            updateChart();
+            if (monitoring) {
+                addFileChange(data.type, details, data.changes);
+                updateEventStats(data.type);
+                updateChart();
+            }
         });
 
         function formatEventDetails(data) {
