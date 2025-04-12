@@ -354,20 +354,20 @@
         Made with <span class="text-red-500">&#10084;</span> by LSAM
     </footer>
 
+    // Replace the entire script section with this updated version
     <script>
         let monitoring = false;
-        let resumedMonitoring = false;
         let eventChart;
         let eventStats = {
             FileModified: 0,
             FileCreated: 0,
             FileDeleted: 0,
             FolderCreated: 0,
-            FolderDeleted: 0,
-            SuspiciousActivity: 0
+            FolderDeleted: 0
         };
         let monitoredPaths = [];
-
+        let socket;
+    
         function initializeChart() {
             const ctx = document.getElementById('eventChart').getContext('2d');
             eventChart = new Chart(ctx, {
@@ -377,12 +377,11 @@
                     datasets: [{
                         data: Object.values(eventStats),
                         backgroundColor: [
-                            '#4F46E5',
-                            '#10B981',
-                            '#EF4444',
-                            '#F59E0B',
-                            '#940404',
-                            '#EC4899'
+                            '#3b82f6', // FileModified - blue
+                            '#10b981', // FileCreated - green
+                            '#ef4444', // FileDeleted - red
+                            '#f59e0b', // FolderCreated - yellow
+                            '#940404'  // FolderDeleted - dark red
                         ]
                     }]
                 },
@@ -392,19 +391,19 @@
                         legend: {
                             position: 'bottom',
                             labels: {
-                                color: '#33ff33'
+                                color: '#e5e7eb'
                             }
                         }
                     }
                 }
             });
         }
-
+    
         async function initializeSystemInfo() {
             try {
                 const response = await fetch('/api/system-info');
                 const data = await response.json();
-
+    
                 document.getElementById('computerName').textContent = data.ComputerName;
                 document.getElementById('username').textContent = data.Username;
                 document.getElementById('domain').textContent = data.Domain;
@@ -414,59 +413,96 @@
                 console.error('Failed to fetch system information:', error);
             }
         }
-
+    
+        async function loadMonitoringConfig() {
+            try {
+                const response = await fetch('/api/monitoring-config');
+                const config = await response.json();
+                
+                if (config.paths && config.paths.length > 0) {
+                    monitoredPaths = config.paths;
+                    updatePathsDisplay();
+                    document.getElementById('pathCount').textContent = monitoredPaths.length;
+                    updatePathFilter();
+                }
+                
+                if (config.logFilePath) {
+                    document.getElementById('logFilePath').value = config.logFilePath;
+                    document.getElementById('logLocation').textContent = config.logFilePath;
+                    document.getElementById('logStatus').textContent = config.active ? 'Active' : 'Inactive';
+                    document.getElementById('logStatus').className = config.active ? 'status-badge status-active' : 'status-badge status-inactive';
+                }
+                
+                if (config.active) {
+                    monitoring = true;
+                    updateMonitoringUI(true);
+                }
+            } catch (error) {
+                console.error('Failed to load monitoring config:', error);
+            }
+        }
+    
+        function updateMonitoringUI(isMonitoring) {
+            const button = document.getElementById('monitoringButton');
+            const statusElement = document.getElementById('serviceStatus');
+            
+            if (isMonitoring) {
+                button.textContent = 'Stop Monitoring';
+                button.classList.remove('button-secondary');
+                button.classList.add('button-danger');
+                statusElement.textContent = 'Active';
+                statusElement.classList.replace('status-inactive', 'status-active');
+                document.getElementById('logStatus').textContent = 'Active';
+                document.getElementById('logStatus').className = 'status-badge status-active';
+            } else {
+                button.textContent = 'Start Monitoring';
+                button.classList.remove('button-danger');
+                button.classList.add('button-secondary');
+                statusElement.textContent = 'Inactive';
+                statusElement.classList.replace('status-active', 'status-inactive');
+                document.getElementById('logStatus').textContent = 'Inactive';
+                document.getElementById('logStatus').className = 'status-badge status-inactive';
+            }
+        }
+    
         function addPath() {
-            const path = document.getElementById('monitorPath').value;
+            const path = document.getElementById('monitorPath').value.trim();
             if (!path) {
                 alert('Please enter a path to monitor');
                 return;
             }
-
+    
             if (monitoredPaths.includes(path)) {
                 alert('This path is already being monitored');
                 return;
             }
-
+    
             monitoredPaths.push(path);
             updatePathsDisplay();
             document.getElementById('monitorPath').value = '';
             document.getElementById('pathCount').textContent = monitoredPaths.length;
-
-            // Add path to filter dropdown
-            const pathFilter = document.getElementById('pathFilter');
-            const option = document.createElement('option');
-            option.value = path;
-            option.textContent = path;
-            pathFilter.appendChild(option);
+            updatePathFilter();
         }
-
+    
         function removePath(path) {
             const index = monitoredPaths.indexOf(path);
             if (index > -1) {
                 monitoredPaths.splice(index, 1);
                 updatePathsDisplay();
                 document.getElementById('pathCount').textContent = monitoredPaths.length;
-
-                // Remove path from filter dropdown
-                const pathFilter = document.getElementById('pathFilter');
-                for (let i = 0; i < pathFilter.options.length; i++) {
-                    if (pathFilter.options[i].value === path) {
-                        pathFilter.remove(i);
-                        break;
-                    }
-                }
+                updatePathFilter();
             }
         }
-
+    
         function updatePathsDisplay() {
             const container = document.getElementById('pathsContainer');
             container.innerHTML = '';
-
+    
             if (monitoredPaths.length === 0) {
                 container.innerHTML = '<p class="text-gray-400">No paths are currently being monitored</p>';
                 return;
             }
-
+    
             monitoredPaths.forEach(path => {
                 const tag = document.createElement('span');
                 tag.className = 'path-tag';
@@ -474,138 +510,136 @@
                 container.appendChild(tag);
             });
         }
-
+    
+        function updatePathFilter() {
+            const pathFilter = document.getElementById('pathFilter');
+            pathFilter.innerHTML = '<option value="all">All Paths</option>';
+            
+            monitoredPaths.forEach(path => {
+                const option = document.createElement('option');
+                option.value = path;
+                option.textContent = path;
+                pathFilter.appendChild(option);
+            });
+        }
+    
         async function initializeBaseline() {
             if (monitoredPaths.length === 0) {
                 alert('Please add at least one path to monitor');
                 return;
             }
-
-            const logFilePath = document.getElementById('logFilePath').value;
+    
+            const logFilePath = document.getElementById('logFilePath').value.trim();
             if (!logFilePath) {
                 alert('Please enter a log file path');
                 return;
             }
-
+    
             try {
                 const response = await fetch('/api/initialize-baseline', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ paths: monitoredPaths, logFilePath })
+                    body: JSON.stringify({ 
+                        paths: monitoredPaths, 
+                        logFilePath: logFilePath 
+                    })
                 });
-
+    
                 if (response.ok) {
                     document.getElementById('logLocation').textContent = logFilePath;
                     document.getElementById('logStatus').textContent = 'Initialized';
                     document.getElementById('logStatus').className = 'status-badge status-active';
-                    document.getElementById('fileSystemChanges').innerHTML = ''; // Clear previous file changes
-                    addFileChange('SystemInitialized', 'Security baseline initialized successfully for multiple paths');
-                    resumedMonitoring = false; // Set resumedMonitoring to false since it's a fresh start
+                    document.getElementById('fileSystemChanges').innerHTML = '';
+                    addFileChange('SystemInitialized', 'Security baseline initialized successfully');
                     addMonitoringHistory(`Baseline initialized for ${monitoredPaths.length} paths`);
-                    monitoring = false; // Reset monitoring flag for new session
                 } else {
-                    throw new Error('Failed to initialize baseline');
+                    throw new Error(await response.text());
                 }
             } catch (error) {
                 console.error('Error initializing baseline:', error);
-                alert('Failed to initialize baseline');
+                alert(`Failed to initialize baseline: ${error.message}`);
             }
         }
-
+    
         async function toggleMonitoring() {
             if (monitoredPaths.length === 0) {
                 alert('Please add at least one path to monitor');
                 return;
             }
-
-            const logFilePath = document.getElementById('logFilePath').value;
+    
+            const logFilePath = document.getElementById('logFilePath').value.trim();
             if (!logFilePath) {
                 alert('Please enter a log file path');
                 return;
             }
-
-            monitoring = !monitoring;
-            const button = document.getElementById('monitoringButton');
-            const statusElement = document.getElementById('serviceStatus');
-
-            if (monitoring) {
-                try {
+    
+            try {
+                if (!monitoring) {
                     const response = await fetch('/api/start-monitoring', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ paths: monitoredPaths, logFilePath })
+                        body: JSON.stringify({ 
+                            paths: monitoredPaths, 
+                            logFilePath: logFilePath 
+                        })
                     });
-
-                    if (response.ok) {
-                        button.textContent = 'Stop Monitoring';
-                        button.classList.remove('button-secondary');
-                        button.classList.add('button-danger');
-                        statusElement.textContent = 'Active';
-                        statusElement.classList.replace('status-inactive', 'status-active');
-                        document.getElementById('logStatus').textContent = 'Active';
-                        document.getElementById('logStatus').className = 'status-badge status-active';
-
-                        if (resumedMonitoring) {
-                            // Load previous logs if resuming
-                            loadPreviousLogs(logFilePath);
-                            addFileChange('MonitoringResumed', 'Monitoring resumed - Logging any changes that occurred while paused');
-                        } else {
-                            addFileChange('MonitoringStarted', 'Monitoring started - Log file created and active');
-                        }
-                        resumedMonitoring = true; // Mark monitoring as resumed if stopped before
-                        addMonitoringHistory(`Monitoring started for ${monitoredPaths.length} paths`);
-                    } else {
-                        throw new Error('Failed to start monitoring');
+    
+                    if (!response.ok) {
+                        throw new Error(await response.text());
                     }
-                } catch (error) {
-                    console.error('Error starting monitoring:', error);
-                    alert('Failed to start monitoring');
+    
+                    monitoring = true;
+                    updateMonitoringUI(true);
+                    addFileChange('MonitoringStarted', 'Monitoring started - Log file created and active');
+                    addMonitoringHistory(`Monitoring started for ${monitoredPaths.length} paths`);
+                } else {
+                    const response = await fetch('/api/stop-monitoring', {
+                        method: 'POST'
+                    });
+    
+                    if (!response.ok) {
+                        throw new Error(await response.text());
+                    }
+    
                     monitoring = false;
-                    return;
+                    updateMonitoringUI(false);
+                    addFileChange('MonitoringPaused', 'Monitoring stopped and paused');
+                    addMonitoringHistory(`Monitoring stopped for ${monitoredPaths.length} paths`);
                 }
-            } else {
-                button.textContent = 'Start Monitoring';
-                button.classList.remove('button-danger');
-                button.classList.add('button-secondary');
-                statusElement.textContent = 'Inactive';
-                statusElement.classList.replace('status-active', 'status-inactive');
-                document.getElementById('logStatus').textContent = 'Paused';
-                document.getElementById('logStatus').className = 'status-badge status-inactive';
-                await stopMonitoring();
-                addMonitoringHistory(`Monitoring stopped for ${monitoredPaths.length} paths`);
-                resumedMonitoring = true; // Mark as paused to allow resuming later
+            } catch (error) {
+                console.error('Error toggling monitoring:', error);
+                alert(`Failed to toggle monitoring: ${error.message}`);
             }
         }
-
+    
         function addFileChange(type, message, changes = '', path = '') {
             const changesContainer = document.getElementById('fileSystemChanges');
             const changeElement = document.createElement('div');
             changeElement.className = `file-change-log-item event-${type}`;
-            changeElement.dataset.path = path; // Store path for filtering
-
+            changeElement.dataset.path = path;
+    
             const timestamp = new Date().toLocaleTimeString();
             changeElement.innerHTML = `
                 <div class="flex justify-between items-center">
-                    <span class="event-type">${type}</span>
-                    <span class="timestamp">${timestamp}</span>
+                    <span class="font-medium">${type}</span>
+                    <span class="text-gray-400">${timestamp}</span>
                 </div>
-                <div class="details">${message}</div>
+                <div class="mt-1">${message}</div>
                 ${formatContentChanges(changes)}
             `;
-
+    
             changesContainer.insertBefore(changeElement, changesContainer.firstChild);
             
-            // Update counter in the statistics section
             if (type in eventStats) {
                 eventStats[type]++;
                 document.getElementById(`count${type}`).textContent = eventStats[type];
+                updateChart();
             }
         }
-
+    
         function addMonitoringHistory(message) {
             const historyContainer = document.getElementById('monitoringHistory');
             
-            // Clear the "No previous monitoring history available" message if present
             if (historyContainer.innerHTML.includes('No previous monitoring history available')) {
                 historyContainer.innerHTML = '';
             }
@@ -615,114 +649,122 @@
             historyElement.innerHTML = `
                 <div class="flex justify-between items-center">
                     <span class="font-medium">System Event</span>
-                    <span class="timestamp">${new Date().toLocaleString()}</span>
+                    <span class="text-gray-400">${new Date().toLocaleString()}</span>
                 </div>
                 <div class="mt-1">${message}</div>
             `;
             historyContainer.appendChild(historyElement);
         }
-
+    
         function formatContentChanges(changes) {
             if (!changes) return '';
-
-            const lines = changes.split('\n');
-            let formattedHTML = '<div class="content-changes">';
-
-            lines.forEach(line => {
-                if (line.startsWith('+')) {
-                    formattedHTML += `<div class="added-content">+ ${line.substring(1)}</div>`;
-                } else if (line.startsWith('-')) {
-                    formattedHTML += `<div class="removed-content">- ${line.substring(1)}</div>`;
+    
+            if (typeof changes === 'string') {
+                const lines = changes.split('\n');
+                let formattedHTML = '<div class="content-changes mt-2">';
+    
+                lines.forEach(line => {
+                    if (line.startsWith('+')) {
+                        formattedHTML += `<div class="added-content">+ ${line.substring(1)}</div>`;
+                    } else if (line.startsWith('-')) {
+                        formattedHTML += `<div class="removed-content">- ${line.substring(1)}</div>`;
+                    }
+                });
+    
+                return formattedHTML + '</div>';
+            } else if (typeof changes === 'object') {
+                let formattedHTML = '<div class="content-changes mt-2">';
+                if (changes.added) {
+                    formattedHTML += `<div class="added-content">+ ${changes.added}</div>`;
+                }
+                if (changes.removed) {
+                    formattedHTML += `<div class="removed-content">- ${changes.removed}</div>`;
+                }
+                return formattedHTML + '</div>';
+            }
+            return '';
+        }
+    
+        function updateChart() {
+            if (eventChart) {
+                eventChart.data.datasets[0].data = Object.values(eventStats);
+                eventChart.update();
+            }
+        }
+    
+        function initializeSocketIO() {
+            socket = io({
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000
+            });
+    
+            socket.on('connect', () => {
+                console.log('Connected to server via Socket.IO');
+            });
+    
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server');
+            });
+    
+            socket.on('connect_error', (error) => {
+                console.error('Socket.IO connection error:', error);
+            });
+    
+            socket.on('file-event', (data) => {
+                if (monitoring) {
+                    addFileChange(data.type, formatEventDetails(data), data.changes, data.path);
                 }
             });
-
-            return formattedHTML + '</div>';
-        }
-
-        async function stopMonitoring() {
-            try {
-                const response = await fetch('/api/stop-monitoring', {
-                    method: 'POST'
-                });
-                if (response.ok) {
-                    addFileChange('MonitoringPaused', 'Monitoring stopped and paused');
-                } else {
-                    throw new Error('Failed to stop monitoring');
+    
+            socket.on('monitoring-config', (config) => {
+                if (config.active !== monitoring) {
+                    monitoring = config.active;
+                    updateMonitoringUI(monitoring);
                 }
-            } catch (error) {
-                console.error('Error stopping monitoring:', error);
-            }
+            });
         }
-
-        async function loadPreviousLogs(logFilePath) {
-            try {
-                const response = await fetch(`/api/load-logs?logFilePath=${encodeURIComponent(logFilePath)}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    data.logs.forEach(log => {
-                        addFileChange(log.type, log.message, log.changes, log.path);
-                    });
-                } else {
-                    console.warn('No previous logs found for this log file path.');
+    
+        function formatEventDetails(data) {
+            let details = `Path: ${data.path}`;
+            if (data.type === 'FileModified') {
+                details += `<br>Changes detected`;
+                if (data.fileInfo) {
+                    details += `<br>Size: ${data.fileInfo.size} bytes`;
                 }
-            } catch (error) {
-                console.error('Failed to load previous logs:', error);
             }
+            if (data.timestamp) {
+                details += `<br>Time: ${new Date(data.timestamp).toLocaleString()}`;
+            }
+            return details;
         }
-
+    
         document.getElementById('pathFilter').addEventListener('change', function() {
             const selectedPath = this.value;
             const items = document.querySelectorAll('.file-change-log-item');
             
             items.forEach(item => {
-                if (selectedPath === 'all' || item.dataset.path === selectedPath) {
+                if (selectedPath === 'all' || item.dataset.path.includes(selectedPath)) {
                     item.style.display = 'block';
                 } else {
                     item.style.display = 'none';
                 }
             });
         });
-
-        const socket = io();
-        socket.on('file-event', (data) => {
-            const details = formatEventDetails(data);
-            if (monitoring) {
-                addFileChange(data.type, details, data.changes, data.path);
-                updateEventStats(data.type);
-                updateChart();
-            }
-        });
-
-        function formatEventDetails(data) {
-            let details = `Path: ${data.path}`;
-            if (data.type === 'FileModified') {
-                details += `<br>Changes: ${data.details}`;
-                if (data.content) {
-                    details += `<br>Modified Content: ${data.content}`;
-                }
-            }
-            if (data.timestamp) {
-                details += `<br>Timestamp: ${new Date(data.timestamp).toLocaleString()}`;
-            }
-            return details;
-        }
-
-        function updateEventStats(type) {
-            if (type in eventStats) {
-                eventStats[type]++;
-                document.getElementById(`count${type}`).textContent = eventStats[type];
-            }
-        }
-
-        function updateChart() {
-            eventChart.data.datasets[0].data = Object.values(eventStats);
-            eventChart.update();
-        }
-
+    
         document.addEventListener('DOMContentLoaded', () => {
             initializeChart();
             initializeSystemInfo();
-            updatePathsDisplay();
+            loadMonitoringConfig();
+            initializeSocketIO();
+        });
+    
+        window.addEventListener('beforeunload', function(e) {
+            if (monitoring) {
+                e.preventDefault();
+                e.returnValue = 'Are you sure you want to exit? Your current monitoring session will be lost.';
+            }
         });
     </script>
 </body>

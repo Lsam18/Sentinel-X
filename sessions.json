@@ -1,0 +1,47 @@
+[
+  {
+    "id": "1b3d02e54847f736",
+    "paths": [
+      "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS"
+    ],
+    "logFilePath": "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS/files-log.log",
+    "startTime": "2025-03-20T20:14:28.896Z",
+    "config": {
+      "paths": [
+        "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS"
+      ],
+      "logFilePath": "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS/files-log.log",
+      "active": false
+    }
+  },
+  {
+    "id": "9507ccbe83207e61",
+    "paths": [
+      "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS"
+    ],
+    "logFilePath": "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS/files-log.log",
+    "startTime": "2025-03-20T20:14:38.989Z",
+    "config": {
+      "paths": [
+        "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS"
+      ],
+      "logFilePath": "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS/files-log.log",
+      "active": false
+    }
+  },
+  {
+    "id": "9a0b591504df70c7",
+    "paths": [
+      "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS"
+    ],
+    "logFilePath": "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS/files-log.log",
+    "startTime": "2025-03-20T20:14:40.673Z",
+    "config": {
+      "paths": [
+        "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS"
+      ],
+      "logFilePath": "/Users/lsam28/Documents/FINALS/Sentinel-X/TESTS/files-log.log",
+      "active": true
+    }
+  }
+]

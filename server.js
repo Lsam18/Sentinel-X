@@ -62,32 +62,46 @@ function getFileDiff(filePath) {
 
         if (previousContent) {
             const differences = diff.diffLines(previousContent, currentContent);
-            let formattedDiff = '';
-
+            
+            // Format the differences for clear logging
+            let addedContent = [];
+            let removedContent = [];
+            
             differences.forEach(part => {
                 if (part.added) {
-                    formattedDiff += `\n+ ${part.value.trim()}`;
+                    addedContent.push(part.value.trim());
                 }
                 if (part.removed) {
-                    formattedDiff += `\n- ${part.value.trim()}`;
+                    removedContent.push(part.value.trim());
                 }
             });
 
             // Store current content for next comparison
             fileContents.set(filePath, currentContent);
 
-            if (formattedDiff.length > 0) {
-                return `Content Changes:\n${formattedDiff}`;
-            }
-            return 'File modified but no content changes detected';
+            // Return structured difference data
+            return {
+                hasChanges: addedContent.length > 0 || removedContent.length > 0,
+                added: addedContent.join(" | "),
+                removed: removedContent.join(" | ")
+            };
         } else {
             // First time seeing this file
             fileContents.set(filePath, currentContent);
-            return `Modified content Detected: "${currentContent.trim()}"`;
+            return {
+                hasChanges: true,
+                added: currentContent.trim(),
+                removed: ""
+            };
         }
     } catch (err) {
         console.error(`Error getting file diff: ${err.message}`);
-        return 'Unable to read file content';
+        return {
+            hasChanges: false,
+            added: "",
+            removed: "",
+            error: `Unable to read file content: ${err.message}`
+        };
     }
 }
 
@@ -118,8 +132,15 @@ function getSystemInformation() {
     };
 }
 
+// Function to sanitize strings for CSV format
+function sanitizeForCsv(str) {
+    if (typeof str !== 'string') return '';
+    // Replace commas, newlines and other characters that could break CSV format
+    return str.replace(/,/g, ';').replace(/\n/g, ' ').replace(/\r/g, '');
+}
+
 // Function to handle file events with enhanced logging
-function logFileEvent(eventType, filePath, details, logFilePath, monitoredPath, changes = '') {
+function logFileEvent(eventType, filePath, details, logFilePath, monitoredPath, changes = null) {
     if (filePath === currentLogPath) {
         return;
     }
@@ -161,42 +182,45 @@ function logFileEvent(eventType, filePath, details, logFilePath, monitoredPath, 
     io.emit('file-event', uiEvent);
 }
 
-// Function to write to log file with error handling
+// Updated function to write to log file with analytics-friendly format
 function writeToLogFile(logFilePath, entry) {
-    const logEntry = `
---------------------------------------------------------------------------------
-[EVENT: ${entry.type}]
-Time: ${new Date().toLocaleString()}
-File Path: ${entry.path}
-Monitored Path: ${entry.monitoredPath || 'N/A'}
-Details: ${entry.details}
-
-Changes:
-${entry.changes}
-
-File Information:
-${entry.fileInfo ? `Size: ${entry.fileInfo.size} bytes
-Created: ${entry.fileInfo.created}
-Last Modified: ${entry.fileInfo.modified}
-File Type: ${entry.fileInfo.type}` : 'N/A'}
-
-System Information:
-Computer Name: ${entry.system.computerName}
-Username: ${entry.user.name}
-Domain: ${entry.user.domain}
-IP Address: ${entry.system.ipAddress}
-OS Version: ${entry.system.osVersion}
-
-Process Information:
-Process Name: ${entry.process.name}
-Process ID: ${entry.process.id}
-Process Path: ${entry.process.path}
---------------------------------------------------------------------------------
-`;
-
     try {
         ensureLogDirectory(logFilePath);
-        fs.appendFileSync(logFilePath, logEntry, 'utf8');
+        
+        // Format timestamp to match the example log format
+        const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        
+        // Extract key information from the entry object
+        let logEntry = `timestamp=${timestamp},` +
+            `destinationhost=${sanitizeForCsv(entry.system.computerName)},` +
+            `username=${sanitizeForCsv(entry.user.name)},` +
+            `sourcehost=${sanitizeForCsv(entry.process.name || 'FIMProcess')},` +
+            `sourceip=${sanitizeForCsv(entry.system.ipAddress)},` +
+            `eventtype=${sanitizeForCsv(entry.type)},` +
+            `filepath=${sanitizeForCsv(entry.path)},` +
+            `monitoredpath=${sanitizeForCsv(entry.monitoredPath || 'N/A')},` +
+            `details=${sanitizeForCsv(entry.details)}`;
+        
+        // Add file information
+        if (entry.fileInfo) {
+            logEntry += `,filesize=${entry.fileInfo.size},` +
+                `filecreated=${sanitizeForCsv(entry.fileInfo.created)},` +
+                `filemodified=${sanitizeForCsv(entry.fileInfo.modified)},` +
+                `filetype=${sanitizeForCsv(entry.fileInfo.type)}`;
+        }
+        
+        // Add process information
+        logEntry += `,processid=${entry.process.id},` +
+            `processpath=${sanitizeForCsv(entry.process.path)},` +
+            `osversion=${sanitizeForCsv(entry.system.osVersion)}`;
+        
+        // Add content change information for file modifications
+        if (entry.type === 'FileModified' && entry.changes && entry.changes.hasChanges) {
+            logEntry += `,contentadded=${sanitizeForCsv(entry.changes.added)},` +
+                `contentremoved=${sanitizeForCsv(entry.changes.removed)}`;
+        }
+        
+        fs.appendFileSync(logFilePath, logEntry + '\n', 'utf8');
         console.log(`Log entry written successfully to ${logFilePath}`);
     } catch (err) {
         console.error(`Failed to write to log file: ${err.message}`);
@@ -247,7 +271,7 @@ app.post('/api/initialize-baseline', express.json(), (req, res) => {
         ensureLogDirectory(logFilePath);
 
         if (!fs.existsSync(logFilePath)) {
-            fs.writeFileSync(logFilePath, '--- Security Monitoring Log ---\n\n', 'utf8');
+            fs.writeFileSync(logFilePath, '', 'utf8');
             console.log(`Log file created at: ${logFilePath}`);
         }
 
@@ -265,12 +289,25 @@ app.post('/api/initialize-baseline', express.json(), (req, res) => {
                 path: pathToMonitor,
                 monitoredPath: pathToMonitor,
                 details: 'Security baseline initialized',
-                user: getSystemInformation(),
-                system: getSystemInformation(),
+                user: {
+                    name: getSystemInformation().username,
+                    domain: getSystemInformation().domain,
+                },
+                system: {
+                    computerName: getSystemInformation().computerName,
+                    ipAddress: getSystemInformation().ipAddress,
+                    osVersion: getSystemInformation().osVersion,
+                },
                 process: {
                     name: process.title,
                     id: process.pid,
                     path: process.execPath,
+                },
+                fileInfo: {
+                    size: 0,
+                    created: new Date().toISOString(),
+                    modified: new Date().toISOString(),
+                    type: 'N/A'
                 }
             };
 
@@ -337,12 +374,25 @@ app.post('/api/start-monitoring', express.json(), (req, res) => {
                 path: pathToMonitor,
                 monitoredPath: pathToMonitor,
                 details: 'File system monitoring initiated',
-                user: getSystemInformation(),
-                system: getSystemInformation(),
+                user: {
+                    name: getSystemInformation().username,
+                    domain: getSystemInformation().domain,
+                },
+                system: {
+                    computerName: getSystemInformation().computerName,
+                    ipAddress: getSystemInformation().ipAddress,
+                    osVersion: getSystemInformation().osVersion,
+                },
                 process: {
                     name: process.title,
                     id: process.pid,
                     path: process.execPath,
+                },
+                fileInfo: {
+                    size: 0,
+                    created: new Date().toISOString(),
+                    modified: new Date().toISOString(),
+                    type: 'N/A'
                 }
             };
 
@@ -374,13 +424,27 @@ app.post('/api/stop-monitoring', express.json(), (req, res) => {
             const stopEntry = {
                 type: 'MonitoringPaused',
                 path: 'All paths',
+                monitoredPath: 'All paths',
                 details: 'File system monitoring paused',
-                user: getSystemInformation(),
-                system: getSystemInformation(),
+                user: {
+                    name: getSystemInformation().username,
+                    domain: getSystemInformation().domain,
+                },
+                system: {
+                    computerName: getSystemInformation().computerName,
+                    ipAddress: getSystemInformation().ipAddress,
+                    osVersion: getSystemInformation().osVersion,
+                },
                 process: {
                     name: process.title,
                     id: process.pid,
                     path: process.execPath,
+                },
+                fileInfo: {
+                    size: 0,
+                    created: new Date().toISOString(),
+                    modified: new Date().toISOString(),
+                    type: 'N/A'
                 }
             };
 
