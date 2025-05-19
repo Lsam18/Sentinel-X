@@ -52,6 +52,7 @@ v                             v
                    | Visual & PDF Log Analysis   |
                    +-----------------------------+
 ```
+![Architecture Diagram](diagram-export-23-04-2025-00_03_07.png)
 
 ---
 
